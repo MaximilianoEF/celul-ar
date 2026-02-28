@@ -1,0 +1,259 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 175 84% 45%;
+    --primary-foreground: 222 47% 6%;
+
+    --secondary: 222 30% 15%;
+    --secondary-foreground: 210 40% 90%;
+
+    --muted: 222 30% 12%;
+    --muted-foreground: 215 20% 55%;
+
+    --accent: 175 70% 40%;
+    --accent-foreground: 222 47% 6%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 222 30% 18%;
+    --input: 222 30% 15%;
+    --ring: 175 84% 45%;
+
+    --radius: 0.75rem;
+
+    /* Custom tokens */
+    --gradient-primary: linear-gradient(135deg, hsl(175 84% 45%) 0%, hsl(190 90% 50%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(222 47% 10%) 0%, hsl(222 47% 7%) 100%);
+    --gradient-hero: linear-gradient(180deg, hsl(222 47% 8%) 0%, hsl(222 47% 4%) 100%);
+    
+    --shadow-glow: 0 0 40px hsl(175 84% 45% / 0.15);
+    --shadow-card: 0 4px 24px hsl(0 0% 0% / 0.3);
+    --shadow-hover: 0 8px 32px hsl(175 84% 45% / 0.2);
+
+    /* Gama colors */
+    --gama-alta: 280 65% 55%;
+    --gama-media: 175 84% 45%;
+    --gama-baja: 38 92% 50%;
+
+    --sidebar-background: 222 47% 6%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 175 84% 45%;
+    --sidebar-primary-foreground: 222 47% 6%;
+    --sidebar-accent: 222 30% 15%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 222 30% 18%;
+    --sidebar-ring: 175 84% 45%;
+  }
+
+  .dark {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 175 84% 45%;
+    --primary-foreground: 222 47% 6%;
+    --secondary: 222 30% 15%;
+    --secondary-foreground: 210 40% 90%;
+    --muted: 222 30% 12%;
+    --muted-foreground: 215 20% 55%;
+    --accent: 175 70% 40%;
+    --accent-foreground: 222 47% 6%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 222 30% 18%;
+    --input: 222 30% 15%;
+    --ring: 175 84% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-xl border border-border/50 rounded-xl;
+    box-shadow: var(--shadow-card);
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300;
+  }
+
+  .glass-card-hover:hover {
+    @apply border-primary/30;
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-2px);
+  }
+
+  .gradient-text {
+    @apply bg-clip-text text-transparent;
+    background-image: var(--gradient-primary);
+  }
+
+  .glow-primary {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .spec-mono {
+    font-family: 'JetBrains Mono', monospace;
+    @apply text-sm;
+  }
+
+  .badge-gama-alta {
+    @apply px-2 py-0.5 rounded-full text-xs font-medium;
+    background: hsl(var(--gama-alta) / 0.2);
+    color: hsl(var(--gama-alta));
+    border: 1px solid hsl(var(--gama-alta) / 0.3);
+  }
+
+  .badge-gama-media {
+    @apply px-2 py-0.5 rounded-full text-xs font-medium;
+    background: hsl(var(--gama-media) / 0.2);
+    color: hsl(var(--gama-media));
+    border: 1px solid hsl(var(--gama-media) / 0.3);
+  }
+
+  .badge-gama-baja {
+    @apply px-2 py-0.5 rounded-full text-xs font-medium;
+    background: hsl(var(--gama-baja) / 0.2);
+    color: hsl(var(--gama-baja));
+    border: 1px solid hsl(var(--gama-baja) / 0.3);
+  }
+
+  /* Phone card image container - lienzo cuadrado con fondo blanco profesional */
+  .phone-image-container {
+    @apply relative w-full overflow-hidden rounded-t-xl;
+    aspect-ratio: 1 / 1; /* Lienzo cuadrado */
+    background: #ffffff; /* Fondo blanco sólido */
+  }
+
+  .phone-image-bg {
+    @apply absolute inset-0;
+    background: #ffffff; /* Fondo blanco puro */
+  }
+
+  .phone-image-wrapper {
+    @apply absolute inset-0 flex items-center justify-center;
+    /* Padding generoso: teléfono ocupa ~80-85% del alto */
+    padding: 10%;
+  }
+
+  .phone-image {
+    @apply w-auto h-full;
+    max-height: 85%;
+    max-width: 85%;
+    object-fit: contain; /* Mantiene proporción, no recorta ni estira */
+  }
+
+  /* Versión para página de detalle - imagen más pequeña para evitar pixelado */
+  .phone-image-container-hq {
+    @apply relative w-full overflow-hidden rounded-xl;
+    aspect-ratio: 1 / 1; /* Mismo aspecto que catálogo */
+    background: #ffffff;
+  }
+
+  .phone-image-wrapper-hq {
+    @apply absolute inset-0 flex items-center justify-center;
+    padding: 18%; /* Más padding = imagen más pequeña (~30% reducción) */
+  }
+
+  .phone-image-hq {
+    @apply w-auto h-full;
+    max-height: 65%; /* Reducido de 85% a 65% */
+    max-width: 65%;
+    object-fit: contain;
+  }
+
+  /* Sombra suave opcional */
+  .phone-image-hq-shadow {
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.06));
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.5s ease-out forwards;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    from { 
+      opacity: 0; 
+      transform: translateY(20px); 
+    }
+    to { 
+      opacity: 1; 
+      transform: translateY(0); 
+    }
+  }
+
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
