@@ -1,10 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { brands, years } from '@/data/smartphones';
 import type { Gama } from '@/data/smartphones';
 
 interface FiltersProps {
@@ -22,6 +21,8 @@ interface FiltersProps {
   onHasNFCChange: (value: boolean | null) => void;
   priceRange: [number, number];
   onPriceRangeChange: (range: [number, number]) => void;
+  brands: string[];
+  years: number[];
 }
 
 export function Filters({
@@ -37,8 +38,19 @@ export function Filters({
   onHas5GChange,
   hasNFC,
   onHasNFCChange,
+  brands,
+  years,
 }: FiltersProps) {
   const [showFilters, setShowFilters] = useState(false);
+  const [localSearch, setLocalSearch] = useState(search);
+
+  // Debounce: espera 300ms antes de propagar el search al padre
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onSearchChange(localSearch);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [localSearch, onSearchChange]);
 
   const toggleBrand = (brand: string) => {
     if (selectedBrands.includes(brand)) {
@@ -65,6 +77,7 @@ export function Filters({
   };
 
   const clearFilters = () => {
+    setLocalSearch('');
     onSearchChange('');
     onBrandsChange([]);
     onGamasChange([]);
@@ -84,8 +97,8 @@ export function Filters({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar smartphone..."
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
+            value={localSearch}
+            onChange={(e) => setLocalSearch(e.target.value)}
             className="pl-10 bg-secondary/50 border-border/50 focus:border-primary"
           />
         </div>

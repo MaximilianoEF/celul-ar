@@ -1,33 +1,53 @@
 import { useParams, Link } from 'react-router-dom';
 import { useState } from 'react';
-import { 
-  ArrowLeft, 
-  ExternalLink, 
-  Check, 
-  X, 
-  Monitor, 
-  Cpu, 
-  HardDrive, 
-  Camera, 
-  Battery, 
-  Wifi, 
+import {
+  ArrowLeft,
+  ExternalLink,
+  Check,
+  X,
+  Monitor,
+  Cpu,
+  HardDrive,
+  Camera,
+  Battery,
+  Wifi,
   Smartphone as SmartphoneIcon,
   Ruler,
   Scale,
   Sparkles
 } from 'lucide-react';
 import { Header } from '@/components/Header';
-import { smartphones, formatPrice, getMinPrice, getPhoneImage } from '@/data/smartphones';
+import { formatPrice, getMinPrice, getPhoneImage } from '@/data/smartphones';
 import { getPurchaseUrl, getGoogleShoppingUrl } from '@/data/storesConfig';
 import { PhonePlaceholder } from '@/components/PhonePlaceholder';
+import { PhoneCardSkeleton } from '@/components/PhoneCardSkeleton';
+import { usePhone } from '@/hooks/usePhones';
 import phoneImages from '@/assets/phones';
 
 const PhoneDetail = () => {
   const { id } = useParams();
-  const phone = smartphones.find(p => p.id === id);
+  const { data: phone, isLoading, isError } = usePhone(id ?? '');
   const [imageError, setImageError] = useState(false);
 
-  if (!phone) {
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="container py-8">
+          <div className="grid lg:grid-cols-2 gap-8">
+            <PhoneCardSkeleton />
+            <div className="space-y-4 animate-pulse">
+              <div className="h-4 w-32 bg-secondary rounded" />
+              <div className="h-8 w-3/4 bg-secondary rounded" />
+              <div className="h-32 bg-secondary/50 rounded-lg" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || !phone) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
@@ -41,12 +61,12 @@ const PhoneDetail = () => {
     );
   }
 
-  const gamaClass = phone.gama === 'alta' ? 'badge-gama-alta' 
-    : phone.gama === 'media' ? 'badge-gama-media' 
+  const gamaClass = phone.gama === 'alta' ? 'badge-gama-alta'
+    : phone.gama === 'media' ? 'badge-gama-media'
     : 'badge-gama-baja';
 
   const minPrice = getMinPrice(phone);
-  
+
   // Prioridad: imagen local > customImage > URL remota
   const localImage = phoneImages[phone.id];
   const imageUrl = localImage || getPhoneImage(phone);
@@ -74,11 +94,11 @@ const PhoneDetail = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
       <main className="container py-8">
         {/* Breadcrumb */}
-        <Link 
-          to="/" 
+        <Link
+          to="/"
           className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -86,7 +106,7 @@ const PhoneDetail = () => {
         </Link>
 
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-12">
-          {/* Image Section - alta calidad para detalle */}
+          {/* Image Section */}
           <div className="glass-card overflow-hidden">
             <div className="phone-image-container-hq">
               <div className="phone-image-bg" />
@@ -141,15 +161,14 @@ const PhoneDetail = () => {
               <p className="text-3xl font-bold gradient-text mb-4">
                 {formatPrice(minPrice)}
               </p>
-              
+
               <div className="space-y-3">
-                {phone.prices.map((price, idx) => {
-                  // Usar sistema extensible de URLs con fallback
+                {phone.prices.map((price) => {
                   const storeUrl = getPurchaseUrl(phone.name, price.store, price.url);
-                  
+
                   return (
-                    <div 
-                      key={idx}
+                    <div
+                      key={price.store}
                       className="flex items-center justify-between py-3 border-b border-border/50 last:border-0"
                     >
                       <div>
@@ -176,7 +195,7 @@ const PhoneDetail = () => {
                     </div>
                   );
                 })}
-                
+
                 {/* Fallback universal: Google Shopping */}
                 <div className="flex items-center justify-between py-3 border-t border-border/30 mt-2">
                   <div>
@@ -214,12 +233,12 @@ const PhoneDetail = () => {
         {/* Specs Section */}
         <section className="mt-12">
           <h2 className="text-2xl font-bold text-foreground mb-6">Especificaciones técnicas</h2>
-          
+
           <div className="glass-card p-6">
             <div className="grid md:grid-cols-2 gap-4">
-              {specItems.map((spec, idx) => (
-                <div 
-                  key={idx}
+              {specItems.map((spec) => (
+                <div
+                  key={spec.label}
                   className="flex items-start gap-4 py-4 border-b border-border/30 last:border-0"
                 >
                   <div className="p-2 rounded-lg bg-primary/10">
@@ -252,8 +271,8 @@ const PhoneDetail = () => {
               Puntos positivos
             </h3>
             <ul className="space-y-3">
-              {phone.pros.map((pro, idx) => (
-                <li key={idx} className="flex items-start gap-3">
+              {phone.pros.map((pro) => (
+                <li key={pro} className="flex items-start gap-3">
                   <Check className="h-4 w-4 text-green-500 mt-1 shrink-0" />
                   <span className="text-muted-foreground">{pro}</span>
                 </li>
@@ -269,8 +288,8 @@ const PhoneDetail = () => {
               Puntos negativos
             </h3>
             <ul className="space-y-3">
-              {phone.cons.map((con, idx) => (
-                <li key={idx} className="flex items-start gap-3">
+              {phone.cons.map((con) => (
+                <li key={con} className="flex items-start gap-3">
                   <X className="h-4 w-4 text-red-500 mt-1 shrink-0" />
                   <span className="text-muted-foreground">{con}</span>
                 </li>
@@ -290,7 +309,6 @@ const PhoneDetail = () => {
         </section>
       </main>
 
-      {/* Footer */}
       <footer className="py-8 border-t border-border/50 mt-12">
         <div className="container">
           <p className="text-sm text-muted-foreground text-center">

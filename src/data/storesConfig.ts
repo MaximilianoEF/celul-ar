@@ -131,20 +131,22 @@ export function getPurchaseUrl(
   return `https://www.google.com.ar/search?q=${encodedQuery}+precio+argentina`;
 }
 
-// Detecta si una URL es probablemente real (no un slug inventado)
+// Allowlist de dominios válidos extraída del storesConfig
+// Solo se aceptan URLs cuyo hostname pertenezca a una tienda configurada
+const ALLOWED_DOMAINS = new Set(
+  Object.values(storesConfig).map(c => c.domain)
+);
+
+// Valida que la URL pertenece a un dominio de tienda conocida (allowlist)
 function isLikelyRealUrl(url: string): boolean {
-  // URLs que son claramente slugs inventados del dataset original
-  // Patrón: dominio + nombre-del-producto sin path real
-  const fakePatterns = [
-    /mercadolibre\.com\.ar\/[a-z-]+-\d+-gb$/i,
-    /mercadolibre\.com\.ar\/[a-z-]+$/i,
-    /ipoint\.com\.ar\/[a-z0-9-]+$/i,
-    /macstation\.com\.ar\/[a-z0-9-]+$/i,
-    /fravega\.com\/p\/celular-[a-z0-9-]+$/i,
-    /tienda\.personal\.com\.ar\/celulares\/[a-z]+\/[a-z0-9-]+$/i,
-  ];
-  
-  return !fakePatterns.some(pattern => pattern.test(url));
+  try {
+    const { hostname } = new URL(url);
+    return [...ALLOWED_DOMAINS].some(
+      domain => hostname === domain || hostname.endsWith('.' + domain)
+    );
+  } catch {
+    return false;
+  }
 }
 
 // Google Shopping como fallback universal

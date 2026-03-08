@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { X, Plus, Trophy, ArrowRight } from 'lucide-react';
 import { Header } from '@/components/Header';
-import { smartphones, formatPrice, getMinPrice, getPhoneImage, Smartphone } from '@/data/smartphones';
+import { usePhones } from '@/hooks/usePhones';
+import { formatPrice, getMinPrice, getPhoneImage, Smartphone } from '@/data/smartphones';
 import { PhonePlaceholder } from '@/components/PhonePlaceholder';
 import phoneImages from '@/assets/phones';
 import {
@@ -14,11 +15,12 @@ import {
 } from '@/components/ui/select';
 
 const Compare = () => {
+  const { data: allPhones = [], isLoading } = usePhones();
   const [selectedPhones, setSelectedPhones] = useState<Smartphone[]>([]);
 
   const addPhone = (phoneId: string) => {
     if (selectedPhones.length >= 3) return;
-    const phone = smartphones.find(p => p.id === phoneId);
+    const phone = allPhones.find(p => p.id === phoneId);
     if (phone && !selectedPhones.find(p => p.id === phoneId)) {
       setSelectedPhones([...selectedPhones, phone]);
     }
@@ -28,9 +30,15 @@ const Compare = () => {
     setSelectedPhones(selectedPhones.filter(p => p.id !== phoneId));
   };
 
-  const availablePhones = smartphones.filter(
+  const availablePhones = allPhones.filter(
     p => !selectedPhones.find(sp => sp.id === p.id)
   );
+
+  // Helper: extrae el primer número de un string
+  const extractNumber = (str: string): number => {
+    const match = str.match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : 0;
+  };
 
   // Calculate winners
   const winners = useMemo(() => {
@@ -39,45 +47,45 @@ const Compare = () => {
     const result: Record<string, { phone: Smartphone; value: string }> = {};
 
     // Best price
-    const byPrice = [...selectedPhones].sort((a, b) => 
+    const byPrice = [...selectedPhones].sort((a, b) =>
       (getMinPrice(a) || Infinity) - (getMinPrice(b) || Infinity)
     );
-    result.price = { 
-      phone: byPrice[0], 
-      value: formatPrice(getMinPrice(byPrice[0])) 
+    result.price = {
+      phone: byPrice[0],
+      value: formatPrice(getMinPrice(byPrice[0]))
     };
 
     // Best camera (by MP)
     const byCamera = [...selectedPhones].sort((a, b) => {
-      const mpA = parseInt(a.specs.mainCamera.split('MP')[0]) || 0;
-      const mpB = parseInt(b.specs.mainCamera.split('MP')[0]) || 0;
+      const mpA = extractNumber(a.specs.mainCamera);
+      const mpB = extractNumber(b.specs.mainCamera);
       return mpB - mpA;
     });
-    result.camera = { 
-      phone: byCamera[0], 
-      value: byCamera[0].specs.mainCamera.split(' ')[0] 
+    result.camera = {
+      phone: byCamera[0],
+      value: byCamera[0].specs.mainCamera.split(' ')[0]
     };
 
     // Best battery
     const byBattery = [...selectedPhones].sort((a, b) => {
-      const batA = parseInt(a.specs.battery) || 0;
-      const batB = parseInt(b.specs.battery) || 0;
+      const batA = extractNumber(a.specs.battery);
+      const batB = extractNumber(b.specs.battery);
       return batB - batA;
     });
-    result.battery = { 
-      phone: byBattery[0], 
-      value: byBattery[0].specs.battery 
+    result.battery = {
+      phone: byBattery[0],
+      value: byBattery[0].specs.battery
     };
 
     // Best RAM
     const byRam = [...selectedPhones].sort((a, b) => {
-      const ramA = parseInt(a.specs.ram) || 0;
-      const ramB = parseInt(b.specs.ram) || 0;
+      const ramA = extractNumber(a.specs.ram);
+      const ramB = extractNumber(b.specs.ram);
       return ramB - ramA;
     });
-    result.ram = { 
-      phone: byRam[0], 
-      value: byRam[0].specs.ram 
+    result.ram = {
+      phone: byRam[0],
+      value: byRam[0].specs.ram
     };
 
     return result;
@@ -102,7 +110,7 @@ const Compare = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
       <main className="container py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">Comparador</h1>
@@ -115,14 +123,14 @@ const Compare = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {[0, 1, 2].map(slot => {
             const phone = selectedPhones[slot];
-            
+
             if (phone) {
               const localImage = phoneImages[phone.id];
               const imageUrl = localImage || getPhoneImage(phone);
               const isPlaceholder = !localImage && (imageUrl.includes('placehold.co') || imageUrl === '/placeholder.svg');
-              
+
               return (
-                <div key={slot} className="glass-card overflow-hidden">
+                <div key={phone.id} className="glass-card overflow-hidden">
                   <div className="p-2 flex justify-end">
                     <button
                       onClick={() => removePhone(phone.id)}
@@ -131,8 +139,7 @@ const Compare = () => {
                       <X className="h-4 w-4" />
                     </button>
                   </div>
-                  
-                  {/* Imagen con mismo estilo que catálogo */}
+
                   <div className="phone-image-container aspect-square">
                     <div className="phone-image-bg" />
                     {isPlaceholder ? (
@@ -152,7 +159,7 @@ const Compare = () => {
                       </div>
                     )}
                   </div>
-                  
+
                   <div className="p-4 text-center">
                     <p className="text-xs text-primary font-medium mb-1">{phone.brand}</p>
                     <h3 className="font-semibold text-foreground text-sm line-clamp-2">
@@ -167,14 +174,14 @@ const Compare = () => {
             }
 
             return (
-              <div key={slot} className="glass-card p-4 flex flex-col items-center justify-center min-h-[280px]">
+              <div key={`slot-${slot}`} className="glass-card p-4 flex flex-col items-center justify-center min-h-[280px]">
                 <div className="p-4 rounded-full bg-secondary mb-4">
                   <Plus className="h-6 w-6 text-muted-foreground" />
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">Agregar equipo</p>
-                <Select onValueChange={addPhone}>
+                <Select onValueChange={addPhone} disabled={isLoading}>
                   <SelectTrigger className="w-full max-w-[200px]">
-                    <SelectValue placeholder="Seleccionar..." />
+                    <SelectValue placeholder={isLoading ? 'Cargando...' : 'Seleccionar...'} />
                   </SelectTrigger>
                   <SelectContent>
                     {availablePhones.map(phone => (
@@ -209,8 +216,8 @@ const Compare = () => {
                   </thead>
                   <tbody>
                     {comparisonRows.map((row, idx) => (
-                      <tr 
-                        key={row.key} 
+                      <tr
+                        key={row.key}
                         className={`border-b border-border/50 ${idx % 2 === 0 ? 'bg-secondary/20' : ''}`}
                       >
                         <td className="p-4 text-sm font-medium text-muted-foreground">
@@ -235,26 +242,26 @@ const Compare = () => {
                   <Trophy className="h-5 w-5 text-primary" />
                   Ganadores por categoría
                 </h2>
-                
+
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="p-4 rounded-lg bg-secondary/50">
                     <p className="text-xs text-muted-foreground mb-1">💰 Mejor precio</p>
                     <p className="font-semibold text-foreground text-sm">{winners.price.phone.name}</p>
                     <p className="text-xs text-primary mt-1">{winners.price.value}</p>
                   </div>
-                  
+
                   <div className="p-4 rounded-lg bg-secondary/50">
                     <p className="text-xs text-muted-foreground mb-1">📷 Mejor cámara</p>
                     <p className="font-semibold text-foreground text-sm">{winners.camera.phone.name}</p>
                     <p className="text-xs text-primary mt-1">{winners.camera.value}</p>
                   </div>
-                  
+
                   <div className="p-4 rounded-lg bg-secondary/50">
                     <p className="text-xs text-muted-foreground mb-1">🔋 Mejor batería</p>
                     <p className="font-semibold text-foreground text-sm">{winners.battery.phone.name}</p>
                     <p className="text-xs text-primary mt-1">{winners.battery.value}</p>
                   </div>
-                  
+
                   <div className="p-4 rounded-lg bg-secondary/50">
                     <p className="text-xs text-muted-foreground mb-1">⚡ Más RAM</p>
                     <p className="font-semibold text-foreground text-sm">{winners.ram.phone.name}</p>
@@ -281,7 +288,6 @@ const Compare = () => {
         )}
       </main>
 
-      {/* Footer */}
       <footer className="py-8 border-t border-border/50 mt-12">
         <div className="container">
           <p className="text-sm text-muted-foreground text-center">
