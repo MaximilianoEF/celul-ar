@@ -3,10 +3,11 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Plus, Trash2, ArrowLeft, Save } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, Save, Search, Loader2 } from 'lucide-react';
 import { usePhone, useCreatePhone, useUpdatePhone } from '@/hooks/usePhones';
 import { MercadoLibreSearch } from '@/components/admin/MercadoLibreSearch';
 import { smartphoneToRow } from '@/lib/supabase';
+import { useDeviceSearch } from '@/hooks/useDeviceSearch';
 
 // ─── Zod Schema ──────────────────────────────────────────────────────────────
 const storePriceSchema = z.object({
@@ -97,6 +98,7 @@ export default function PhoneForm() {
   const { data: existingPhone, isLoading: isLoadingPhone } = usePhone(id ?? '');
   const create = useCreatePhone();
   const update = useUpdatePhone();
+  const deviceSearch = useDeviceSearch();
 
   const {
     register,
@@ -138,6 +140,29 @@ export default function PhoneForm() {
   }, [existingPhone, isEdit, reset]);
 
   const watchedName = watch('name');
+  const watchedBrand = watch('brand');
+  const watchedYear = watch('year');
+
+  const handleAutoFill = async () => {
+    const result = await deviceSearch.search(watchedName, watchedBrand, watchedYear);
+    if (!result) return;
+
+    if (result.image)        setValue('image', result.image);
+    if (result.display)      setValue('specs.display', result.display);
+    if (result.processor)    setValue('specs.processor', result.processor);
+    if (result.ram)          setValue('specs.ram', result.ram);
+    if (result.storage)      setValue('specs.storage', result.storage);
+    if (result.mainCamera)   setValue('specs.mainCamera', result.mainCamera);
+    if (result.frontCamera)  setValue('specs.frontCamera', result.frontCamera);
+    if (result.battery)      setValue('specs.battery', result.battery);
+    if (result.charging)     setValue('specs.charging', result.charging);
+    if (result.connectivity) setValue('specs.connectivity', result.connectivity);
+    if (result.os)           setValue('specs.os', result.os);
+    if (result.dimensions)   setValue('specs.dimensions', result.dimensions);
+    if (result.weight)       setValue('specs.weight', result.weight);
+    setValue('has5G', result.has5G);
+    setValue('hasNFC', result.hasNFC);
+  };
 
   const onSubmit = async (data: PhoneFormData) => {
     const phoneRow = smartphoneToRow({
@@ -274,7 +299,27 @@ export default function PhoneForm() {
 
           {/* Especificaciones técnicas */}
           <div className={sectionClass}>
-            <h2 className="text-base font-semibold text-foreground mb-4">Especificaciones técnicas</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-foreground">Especificaciones técnicas</h2>
+              <button
+                type="button"
+                onClick={handleAutoFill}
+                disabled={deviceSearch.isLoading || !watchedName || !watchedBrand}
+                title="Busca y completa las specs desde GSMArena usando el nombre, marca y año"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deviceSearch.isLoading
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <Search className="h-3.5 w-3.5" />
+                }
+                {deviceSearch.isLoading ? 'Buscando...' : 'Autocompletar desde GSMArena'}
+              </button>
+            </div>
+            {deviceSearch.error && (
+              <div className="mb-4 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/20">
+                <p className="text-xs text-destructive">{deviceSearch.error}</p>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {[
                 { field: 'specs.display', label: 'Pantalla', placeholder: '6.2" AMOLED, 2340x1080, 120Hz' },
