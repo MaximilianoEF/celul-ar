@@ -14,20 +14,51 @@ import {
   Smartphone as SmartphoneIcon,
   Ruler,
   Scale,
-  Sparkles
+  Sparkles,
+  RefreshCw,
+  Search,
 } from 'lucide-react';
 import { Header } from '@/components/Header';
-import { formatPrice, getMinPrice, getPhoneImage } from '@/data/smartphones';
-import { getPurchaseUrl, getGoogleShoppingUrl } from '@/data/storesConfig';
+import { formatPrice, getPhoneImage } from '@/data/smartphones';
+import { getGoogleShoppingUrl } from '@/data/storesConfig';
 import { PhonePlaceholder } from '@/components/PhonePlaceholder';
 import { PhoneCardSkeleton } from '@/components/PhoneCardSkeleton';
 import { usePhone } from '@/hooks/usePhones';
+import { useLiveMLPrice } from '@/hooks/useLiveMLPrice';
+import { useLiveFravegaPrice } from '@/hooks/useLiveFravegaPrice';
 import phoneImages from '@/assets/phones';
 
 const PhoneDetail = () => {
   const { id } = useParams();
   const { data: phone, isLoading, isError } = usePhone(id ?? '');
   const [imageError, setImageError] = useState(false);
+
+  // ── Precios en tiempo real ─────────────────────────────────────────────────
+  const {
+    data: mlListings = [],
+    isLoading: mlLoading,
+    isError: mlError,
+    refetch: refetchML,
+  } = useLiveMLPrice(phone?.name ?? '', phone?.year);
+
+  const {
+    data: fravegaResult,
+    isLoading: fravegaLoading,
+  } = useLiveFravegaPrice(phone?.name ?? '');
+
+  // Precio más bajo entre ML (fuente real) y Frávega (si hay)
+  const cheapestML = mlListings[0]?.price;
+  const cheapestFravega = fravegaResult?.price;
+  const lowestLivePrice =
+    cheapestML && cheapestFravega
+      ? Math.min(cheapestML, cheapestFravega)
+      : (cheapestML ?? cheapestFravega ?? null);
+
+  // Precios de otras tiendas desde la DB (excluimos ML y Frávega, que ahora son live)
+  const otherStorePrices = (phone?.prices ?? []).filter((p) => {
+    const normalized = p.store.toLowerCase().replace(/\s+/g, '').replace(/á/g, 'a');
+    return !['mercadolibre', 'fravega'].includes(normalized);
+  });
 
   if (isLoading) {
     return (
@@ -64,8 +95,6 @@ const PhoneDetail = () => {
   const gamaClass = phone.gama === 'alta' ? 'badge-gama-alta'
     : phone.gama === 'media' ? 'badge-gama-media'
     : 'badge-gama-baja';
-
-  const minPrice = getMinPrice(phone);
 
   // Prioridad: imagen local > customImage > URL remota
   const localImage = phoneImages[phone.id];
@@ -157,56 +186,193 @@ const PhoneDetail = () => {
 
             {/* Price */}
             <div className="glass-card p-6 mb-8">
-              <p className="text-sm text-muted-foreground mb-2">Precio más bajo encontrado</p>
-              <p className="text-3xl font-bold gradient-text mb-4">
-                {formatPrice(minPrice)}
-              </p>
+              {/* ── Encabezado con precio más bajo ── */}
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Mejor precio en tiempo real</p>
+                  {mlLoading ? (
+                    <div className="h-9 w-40 bg-secondary animate-pulse rounded-lg" />
+                  ) : lowestLivePrice ? (
+                    <p className="text-3xl font-bold gradient-text">
+                      {formatPrice(lowestLivePrice)}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">No disponible</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => refetchML()}
+                  disabled={mlLoading}
+                  title="Actualizar precios"
+                  className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-4 w-4 text-muted-foreground ${mlLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
 
-              <div className="space-y-3">
-                {phone.prices.map((price) => {
-                  const storeUrl = getPurchaseUrl(phone.name, price.store, price.url);
+              <div className="space-y-4">
+                {/* ── Mercado Libre (precios en vivo) ── */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <p className="text-sm font-semibold text-foreground">🛒 Mercado Libre</p>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-500/15 text-green-400 border border-green-500/20">
+                      EN VIVO
+                    </span>
+                  </div>
 
-                  return (
+                  {mlLoading && (
+                    <div className="space-y-2">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-11 bg-secondary/50 animate-pulse rounded-lg" />
+                      ))}
+                    </div>
+                  )}
+
+                  {mlError && (
+                    <div className="flex items-center justify-between py-2">
+                      <p className="text-xs text-muted-foreground italic">
+                        No se pudo obtener el precio. Intentá de nuevo.
+                      </p>
+                      <a
+                        href={`https://listado.mercadolibre.com.ar/${encodeURIComponent(phone.name.replace(/\s+/g, '-'))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground text-xs font-medium hover:bg-secondary/80 transition-all shrink-0"
+                      >
+                        Buscar <Search className="h-3 w-3" />
+                      </a>
+                    </div>
+                  )}
+
+                  {!mlLoading && !mlError && mlListings.length === 0 && (
+                    <p className="text-xs text-muted-foreground italic py-2">
+                      Sin resultados en esta categoría.
+                    </p>
+                  )}
+
+                  {!mlLoading && mlListings.map((listing) => (
                     <div
-                      key={price.store}
-                      className="flex items-center justify-between py-3 border-b border-border/50 last:border-0"
+                      key={listing.id}
+                      className="flex items-center justify-between py-2.5 border-b border-border/30 last:border-0 gap-3"
                     >
-                      <div>
-                        <p className="font-medium text-foreground">{price.store}</p>
-                        {!price.available && (
-                          <p className="text-xs text-destructive">Sin stock</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-foreground truncate">{listing.title}</p>
+                        {listing.soldQuantity > 0 && (
+                          <p className="text-[10px] text-muted-foreground">{listing.soldQuantity} vendidos</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-4">
-                        <span className={`font-semibold ${price.available ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
-                          {price.price ? formatPrice(price.price) : 'No disponible'}
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-sm font-semibold text-foreground whitespace-nowrap">
+                          {formatPrice(listing.price)}
                         </span>
-                        {price.available && (
-                          <a
-                            href={storeUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:brightness-110 transition-all"
-                          >
-                            Ver <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                        )}
+                        <a
+                          href={listing.permalink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:brightness-110 transition-all"
+                        >
+                          Ver <ExternalLink className="h-3 w-3" />
+                        </a>
                       </div>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
 
-                {/* Fallback universal: Google Shopping */}
-                <div className="flex items-center justify-between py-3 border-t border-border/30 mt-2">
+                {/* ── Frávega (scraping o link de búsqueda) ── */}
+                <div className="pt-2 border-t border-border/30">
+                  <div className="flex items-center gap-2 mb-2">
+                    <p className="text-sm font-semibold text-foreground">🏪 Frávega</p>
+                    {fravegaResult && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-500/15 text-green-400 border border-green-500/20">
+                        EN VIVO
+                      </span>
+                    )}
+                  </div>
+
+                  {fravegaLoading ? (
+                    <div className="h-11 bg-secondary/50 animate-pulse rounded-lg" />
+                  ) : fravegaResult ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-foreground truncate">{fravegaResult.title}</p>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-sm font-semibold text-foreground whitespace-nowrap">
+                          {formatPrice(fravegaResult.price)}
+                        </span>
+                        <a
+                          href={fravegaResult.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:brightness-110 transition-all"
+                        >
+                          Ver <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-muted-foreground">Buscá el precio actualizado</p>
+                      <a
+                        href={`https://www.fravega.com/l/?keyword=${encodeURIComponent(phone.name.replace(/^Apple\s+/i, ''))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground text-xs font-medium hover:bg-secondary/80 transition-all"
+                      >
+                        Buscar en Frávega <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Otras tiendas (admin-managed, excluye ML y Frávega) ── */}
+                {otherStorePrices.length > 0 && (
+                  <div className="pt-2 border-t border-border/30 space-y-2">
+                    <p className="text-sm font-semibold text-foreground mb-1">🏬 Otras tiendas</p>
+                    {otherStorePrices.map((price) => (
+                      <div
+                        key={price.store}
+                        className="flex items-center justify-between gap-3"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{price.store}</p>
+                          {!price.available && (
+                            <p className="text-xs text-destructive">Sin stock</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          {price.price && (
+                            <span className={`text-sm font-semibold ${price.available ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
+                              {formatPrice(price.price)}
+                            </span>
+                          )}
+                          {price.available && price.url && (
+                            <a
+                              href={price.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:brightness-110 transition-all"
+                            >
+                              Ver <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* ── Google Shopping fallback ── */}
+                <div className="flex items-center justify-between py-2 border-t border-border/30">
                   <div>
-                    <p className="font-medium text-foreground">Google Shopping</p>
-                    <p className="text-xs text-muted-foreground">Buscar en todas las tiendas</p>
+                    <p className="text-sm font-medium text-foreground">🔍 Google Shopping</p>
+                    <p className="text-xs text-muted-foreground">Comparar en todas las tiendas</p>
                   </div>
                   <a
                     href={getGoogleShoppingUrl(phone.name)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-all"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground text-xs font-medium hover:bg-secondary/80 transition-all"
                   >
                     Buscar <ExternalLink className="h-3.5 w-3.5" />
                   </a>
