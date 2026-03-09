@@ -161,6 +161,24 @@ const Compare = () => {
       result.gamaMed = null;
     }
 
+    // 👑 Mejor gama alta: mejor relación rendimiento/precio entre los teléfonos gama alta seleccionados
+    const altaPhones = selectedPhones.filter(p => p.gama === 'alta');
+    if (altaPhones.length > 0) {
+      const byAlta = [...altaPhones].sort((a, b) => {
+        const priceA = getMinPrice(a) || 9_999_999;
+        const priceB = getMinPrice(b) || 9_999_999;
+        const sA = (getProcessorScore(a.specs.processor) + extractNumber(a.specs.ram) * 5) / (priceA / 100_000);
+        const sB = (getProcessorScore(b.specs.processor) + extractNumber(b.specs.ram) * 5) / (priceB / 100_000);
+        return sB - sA;
+      });
+      result.gamaAlta = {
+        phone: byAlta[0],
+        value: `${formatPrice(getMinPrice(byAlta[0]))} · ${byAlta[0].specs.processor.split('(')[0].trim()}`,
+      };
+    } else {
+      result.gamaAlta = null;
+    }
+
     return result;
   }, [selectedPhones]);
 
@@ -180,7 +198,7 @@ const Compare = () => {
     { label: 'NFC', key: 'nfc', getValue: (p: Smartphone) => p.hasNFC ? '✓ Sí' : '✗ No' },
   ];
 
-  // Categorías de ganadores siempre visibles (las de gama media solo si aplica)
+  // Categorías de ganadores (las de gama solo aparecen si hay al menos un phone de esa gama)
   const winnerCategories = winners ? [
     { key: 'price',      emoji: '💰', label: 'Mejor precio' },
     { key: 'camera',     emoji: '📷', label: 'Mejor cámara' },
@@ -188,7 +206,8 @@ const Compare = () => {
     { key: 'ram',        emoji: '⚡', label: 'Más RAM' },
     { key: 'rendimiento',emoji: '🚀', label: 'Mejor rendimiento' },
     { key: 'gaming',     emoji: '🎮', label: 'Mejor gaming' },
-    ...(winners.gamaMed ? [{ key: 'gamaMed', emoji: '🥈', label: 'Mejor gama media' }] : []),
+    ...(winners.gamaAlta ? [{ key: 'gamaAlta', emoji: '👑', label: 'Mejor gama alta' }] : []),
+    ...(winners.gamaMed  ? [{ key: 'gamaMed',  emoji: '🥈', label: 'Mejor gama media' }] : []),
   ] : [];
 
   return (
@@ -337,9 +356,12 @@ const Compare = () => {
                   })}
                 </div>
 
-                {!winners.gamaMed && (
+                {(!winners.gamaAlta || !winners.gamaMed) && (
                   <p className="text-xs text-muted-foreground mt-4">
-                    💡 Agregá un teléfono de gama media para ver la categoría "Mejor gama media"
+                    💡 {[
+                      !winners.gamaAlta && 'Agregá un teléfono de gama alta para ver "Mejor gama alta"',
+                      !winners.gamaMed  && 'Agregá un teléfono de gama media para ver "Mejor gama media"',
+                    ].filter(Boolean).join(' · ')}
                   </p>
                 )}
               </div>
