@@ -37,6 +37,10 @@ export interface Smartphone {
   prices: StorePrice[];
   has5G: boolean;
   hasNFC: boolean;
+  // Precio ML sincronizado automáticamente desde la API pública de Mercado Libre.
+  // null = nunca sincronizado (el hook useMLPriceSync lo completa en la primera visita).
+  mlLowestPrice?: number | null;
+  mlPriceUpdatedAt?: string | null;
 }
 
 // Función para obtener la imagen del teléfono (prioriza customImage)
@@ -2457,9 +2461,21 @@ export const brands = [...new Set(smartphones.map(s => s.brand))].sort();
 export const years = [...new Set(smartphones.map(s => s.year))].sort((a, b) => b - a);
 
 export function getMinPrice(phone: Smartphone): number | null {
-  const available = phone.prices.filter(p => p.available && p.price);
-  if (available.length === 0) return null;
-  return Math.min(...available.map(p => p.price!));
+  const candidates: number[] = [];
+
+  // 1. Precio ML cacheado en DB (fuente primaria, actualizado cada 30 días)
+  if (phone.mlLowestPrice) candidates.push(phone.mlLowestPrice);
+
+  // 2. Precios de otras tiendas (Personal, Claro, Frávega, etc.)
+  //    Excluimos Mercado Libre del store_prices ya que ahora se usa mlLowestPrice.
+  for (const p of phone.prices) {
+    if (!p.available || !p.price) continue;
+    const norm = p.store.toLowerCase().replace(/\s+/g, '').replace(/á/g, 'a');
+    if (norm === 'mercadolibre') continue;
+    candidates.push(p.price);
+  }
+
+  return candidates.length > 0 ? Math.min(...candidates) : null;
 }
 
 export function formatPrice(price: number | null): string {

@@ -60,7 +60,9 @@ export function usePhone(id: string) {
 }
 
 // ─── Tipos para mutaciones ───────────────────────────────────────────────────
-type PhoneInput = Omit<SmartphoneRow, 'created_at' | 'updated_at'>;
+// ml_price_updated_at se excluye del input porque es gestionado exclusivamente
+// por el RPC update_ml_price (con SECURITY DEFINER). No se pasa en insert/update.
+type PhoneInput = Omit<SmartphoneRow, 'created_at' | 'updated_at' | 'ml_price_updated_at'>;
 type PriceInput = Omit<StorePriceRow, 'id' | 'smartphone_id' | 'created_at'>;
 
 // ─── Hooks de escritura (admin) ──────────────────────────────────────────────

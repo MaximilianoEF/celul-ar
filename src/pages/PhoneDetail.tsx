@@ -26,6 +26,7 @@ import { PhoneCardSkeleton } from '@/components/PhoneCardSkeleton';
 import { usePhone } from '@/hooks/usePhones';
 import { useLiveMLPrice } from '@/hooks/useLiveMLPrice';
 import { useLiveFravegaPrice } from '@/hooks/useLiveFravegaPrice';
+import { useMLPriceSync } from '@/hooks/useMLPriceSync';
 import phoneImages from '@/assets/phones';
 
 const PhoneDetail = () => {
@@ -33,7 +34,12 @@ const PhoneDetail = () => {
   const { data: phone, isLoading, isError } = usePhone(id ?? '');
   const [imageError, setImageError] = useState(false);
 
-  // ── Precios en tiempo real ─────────────────────────────────────────────────
+  // ── Sincronización automática del precio ML en DB (cada 30 días) ──────────
+  // Si ml_price_updated_at es null o tiene más de 30 días, dispara un fetch
+  // a la API de ML y guarda el resultado en la DB via RPC.
+  useMLPriceSync(phone);
+
+  // ── Precios en tiempo real (para mostrar listados individuales) ────────────
   const {
     data: mlListings = [],
     isLoading: mlLoading,
@@ -46,13 +52,21 @@ const PhoneDetail = () => {
     isLoading: fravegaLoading,
   } = useLiveFravegaPrice(phone?.name ?? '');
 
-  // Precio más bajo entre ML (fuente real) y Frávega (si hay)
+  // Precio de cabecera: priorizamos el precio ML cacheado en DB.
+  // Si todavía no está disponible (primera carga), usamos el precio en tiempo real.
   const cheapestML = mlListings[0]?.price;
   const cheapestFravega = fravegaResult?.price;
-  const lowestLivePrice =
-    cheapestML && cheapestFravega
-      ? Math.min(cheapestML, cheapestFravega)
-      : (cheapestML ?? cheapestFravega ?? null);
+  const dbMLPrice = phone?.mlLowestPrice ?? null;
+  const lowestLivePrice = (() => {
+    const candidates = [dbMLPrice, cheapestML, cheapestFravega].filter((p): p is number => !!p);
+    return candidates.length > 0 ? Math.min(...candidates) : null;
+  })();
+
+  // Fecha de última actualización del precio ML
+  const mlPriceDate = phone?.mlPriceUpdatedAt
+    ? new Date(phone.mlPriceUpdatedAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : null;
+
 
   // Precios de otras tiendas desde la DB (excluimos ML y Frávega, que ahora son live)
   const otherStorePrices = (phone?.prices ?? []).filter((p) => {
@@ -189,8 +203,18 @@ const PhoneDetail = () => {
               {/* ── Encabezado con precio más bajo ── */}
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Mejor precio en tiempo real</p>
-                  {mlLoading ? (
+                  <p className="text-sm text-muted-foreground mb-1">
+                    Mejor precio
+                    {mlPriceDate && (
+                      <span className="ml-1 text-xs opacity-60">· actualizado {mlPriceDate}</span>
+                    )}
+                  </p>
+                  {/* Mostramos el precio DB inmediatamente si existe; si no, esperamos ML live */}
+                  {dbMLPrice ? (
+                    <p className="text-3xl font-bold gradient-text">
+                      {formatPrice(lowestLivePrice ?? dbMLPrice)}
+                    </p>
+                  ) : mlLoading ? (
                     <div className="h-9 w-40 bg-secondary animate-pulse rounded-lg" />
                   ) : lowestLivePrice ? (
                     <p className="text-3xl font-bold gradient-text">

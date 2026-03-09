@@ -282,10 +282,10 @@ export function useDeviceSearch() {
     setError(null);
 
     try {
-      // Evitar que el brand aparezca dos veces si ya está en el nombre
-      // Ej: brand="Xiaomi" name="Xiaomi Redmi 15c" → "Xiaomi Redmi 15c 2026" (no "Xiaomi Xiaomi ...")
-      const nameWithoutBrand = name.replace(new RegExp(`^${brand}\\s+`, 'i'), '').trim();
-      const query = `${brand} ${nameWithoutBrand || name} ${year}`.replace(/\s+/g, ' ').trim();
+      // Buscar exactamente con el nombre completo que escribió el admin.
+      // No agregamos brand ni year: son redundantes (el nombre ya los incluye)
+      // y añadir el año rompe el índice de búsqueda rápida de GSMArena.
+      const query = name.trim();
       const deviceUrl = await findDeviceUrl(query);
 
       if (!deviceUrl) {

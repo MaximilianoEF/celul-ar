@@ -8,6 +8,7 @@ import { usePhone, useCreatePhone, useUpdatePhone } from '@/hooks/usePhones';
 import { MercadoLibreSearch } from '@/components/admin/MercadoLibreSearch';
 import { smartphoneToRow } from '@/lib/supabase';
 import { useDeviceSearch } from '@/hooks/useDeviceSearch';
+import { formatPrice } from '@/data/smartphones';
 
 // ─── Zod Schema ──────────────────────────────────────────────────────────────
 const storePriceSchema = z.object({
@@ -48,6 +49,12 @@ const phoneFormSchema = z.object({
   prices: z.array(storePriceSchema),
   has5G: z.boolean(),
   hasNFC: z.boolean(),
+  // Precio inicial requerido al crear un teléfono nuevo.
+  // En modo edición el precio ML es auto-gestionado por useMLPriceSync.
+  initialPrice: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? null : Number(v)),
+    z.number().min(1, 'Ingresá un precio mayor a 0').nullable().optional()
+  ),
 });
 
 type PhoneFormData = z.infer<typeof phoneFormSchema>;
@@ -81,6 +88,7 @@ const defaultValues: PhoneFormData = {
   prices: [],
   has5G: false,
   hasNFC: false,
+  initialPrice: null,
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -165,19 +173,37 @@ export default function PhoneForm() {
   };
 
   const onSubmit = async (data: PhoneFormData) => {
+    // Precio ML:
+    // - Crear: usa el precio inicial ingresado por el admin (campo initialPrice)
+    // - Editar: preserva el valor ya en DB (el hook useMLPriceSync lo auto-actualiza)
+    const mlLowestPrice = isEdit
+      ? (existingPhone?.mlLowestPrice ?? null)
+      : (data.initialPrice ?? null);
+
+    // Validación extra para crear: precio inicial obligatorio
+    if (!isEdit && !mlLowestPrice) {
+      alert('Ingresá el precio inicial en Mercado Libre antes de guardar.');
+      return;
+    }
+
     const phoneRow = smartphoneToRow({
       ...data,
+      mlLowestPrice,
+      mlPriceUpdatedAt: isEdit ? (existingPhone?.mlPriceUpdatedAt ?? null) : null,
       pros: data.pros.map(p => p.value),
       cons: data.cons.map(c => c.value),
       customImage: null,
     });
 
-    const priceRows = data.prices.map(p => ({
-      store: p.store,
-      price: p.price,
-      url: p.url || null,
-      available: p.available,
-    }));
+    // Excluimos Mercado Libre de store_prices — ahora se gestiona vía mlLowestPrice
+    const priceRows = data.prices
+      .filter(p => p.store.toLowerCase().replace(/\s+/g, '').replace(/á/g, 'a') !== 'mercadolibre')
+      .map(p => ({
+        store: p.store,
+        price: p.price,
+        url: p.url || null,
+        available: p.available,
+      }));
 
     try {
       if (isEdit) {
@@ -191,14 +217,12 @@ export default function PhoneForm() {
     }
   };
 
-  const handleMLPrice = (price: number, url: string) => {
-    const existingIdx = pricesFields.findIndex(f => f.store === 'Mercado Libre');
-    if (existingIdx >= 0) {
-      setValue(`prices.${existingIdx}.price`, price);
-      setValue(`prices.${existingIdx}.url`, url);
-    } else {
-      appendPrice({ store: 'Mercado Libre', price, url, available: true });
+  const handleMLPrice = (price: number, _url: string) => {
+    if (!isEdit) {
+      // Crear: el precio ML va al campo initialPrice (no a store_prices)
+      setValue('initialPrice', price);
     }
+    // En edición: el precio ML es auto-gestionado por useMLPriceSync, no se modifica aquí
   };
 
   if (isEdit && isLoadingPhone) {
@@ -441,17 +465,81 @@ export default function PhoneForm() {
             </div>
           </div>
 
-          {/* Precios */}
+          {/* ── Precio en Mercado Libre ───────────────────────────────────────────── */}
           <div className={sectionClass}>
-            <h2 className="text-base font-semibold text-foreground mb-4">Precios por tienda</h2>
+            {!isEdit ? (
+              <>
+                <h2 className="text-base font-semibold text-foreground mb-1">
+                  Precio en Mercado Libre <span className="text-destructive">*</span>
+                </h2>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Ingresá el precio de referencia. Usá el buscador para encontrarlo rápido. Se actualizará automáticamente desde la API de Mercado Libre cada 30 días.
+                </p>
 
-            {/* Búsqueda en MercadoLibre */}
-            <div className="mb-4">
-              <MercadoLibreSearch
-                phoneName={watchedName}
-                onSelectPrice={handleMLPrice}
-              />
-            </div>
+                {/* Buscador ML → llena el campo initialPrice */}
+                <div className="mb-4">
+                  <MercadoLibreSearch phoneName={watchedName} onSelectPrice={handleMLPrice} />
+                </div>
+
+                {/* Campo de precio */}
+                <div>
+                  <label className={labelClass}>Precio inicial (ARS)</label>
+                  <input
+                    {...register('initialPrice', { setValueAs: v => v === '' ? null : Number(v) })}
+                    type="number"
+                    className={inputClass}
+                    placeholder="1500000"
+                  />
+                  {errors.initialPrice && (
+                    <p className={errorClass}>{errors.initialPrice.message as string}</p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="text-base font-semibold text-foreground mb-1">Precio en Mercado Libre</h2>
+                {existingPhone?.mlLowestPrice ? (
+                  <>
+                    <p className="text-2xl font-bold text-primary mt-2">
+                      {formatPrice(existingPhone.mlLowestPrice)}
+                    </p>
+                    {existingPhone.mlPriceUpdatedAt && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Última actualización:{' '}
+                        {new Date(existingPhone.mlPriceUpdatedAt).toLocaleDateString('es-AR', {
+                          day: '2-digit', month: '2-digit', year: 'numeric',
+                        })}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground mt-2 italic">
+                    Sin precio cacheado. Se actualizará automáticamente en la próxima visita al detalle.
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground mt-3">
+                  🔄 El precio se sincroniza automáticamente desde Mercado Libre cada 30 días.
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Precios por otras tiendas */}
+          <div className={sectionClass}>
+            <h2 className="text-base font-semibold text-foreground mb-4">Precios por otras tiendas</h2>
+            <p className="text-xs text-muted-foreground mb-4">
+              Frávega, Personal, Claro, MacStation, etc. Mercado Libre se gestiona automáticamente.
+            </p>
+
+            {/* Búsqueda en MercadoLibre (solo en edición para referencia) */}
+            {isEdit && (
+              <div className="mb-4 opacity-60">
+                <MercadoLibreSearch phoneName={watchedName} onSelectPrice={handleMLPrice} />
+                <p className="text-xs text-muted-foreground mt-1">
+                  ℹ️ En edición el precio ML es auto-gestionado. Este buscador es solo referencia.
+                </p>
+              </div>
+            )}
 
             <div className="space-y-3">
               {pricesFields.map((field, idx) => (

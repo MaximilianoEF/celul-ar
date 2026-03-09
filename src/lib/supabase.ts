@@ -43,6 +43,8 @@ export interface SmartphoneRow {
   for_who: string | null;
   has_5g: boolean;
   has_nfc: boolean;
+  ml_lowest_price: number | null;       // precio ML cacheado (null = sin sincronizar)
+  ml_price_updated_at: string | null;   // fecha de última sincronización
   created_at: string;
   updated_at: string;
 }
@@ -80,13 +82,17 @@ export function rowToSmartphone(row: SmartphoneRow, prices: StorePriceRow[]): Sm
     })),
     has5G: row.has_5g,
     hasNFC: row.has_nfc,
+    mlLowestPrice: row.ml_lowest_price ?? null,
+    mlPriceUpdatedAt: row.ml_price_updated_at ?? null,
   };
 }
 
 // Convierte un Smartphone del frontend al formato de fila DB (para inserts/updates)
+// Nota: ml_price_updated_at NO se incluye aquí — es gestionado exclusivamente
+// por el RPC update_ml_price para garantizar una sincronización limpia.
 export function smartphoneToRow(
   phone: Omit<Smartphone, 'prices'>
-): Omit<SmartphoneRow, 'created_at' | 'updated_at'> {
+): Omit<SmartphoneRow, 'created_at' | 'updated_at' | 'ml_price_updated_at'> {
   return {
     id: phone.id,
     name: phone.name,
@@ -102,5 +108,8 @@ export function smartphoneToRow(
     for_who: phone.forWho,
     has_5g: phone.has5G,
     has_nfc: phone.hasNFC,
+    // Precio ML inicial (ingresado por el admin). La columna ml_price_updated_at
+    // quedará NULL → el hook useMLPriceSync lo actualizará en la primera visita.
+    ml_lowest_price: phone.mlLowestPrice ?? null,
   };
 }
