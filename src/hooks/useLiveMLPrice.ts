@@ -15,15 +15,16 @@ export interface MLListing {
 
 async function fetchMLListings(phoneName: string, year?: number): Promise<MLListing[]> {
   // ML lista los iPhone sin "Apple" → la quitamos para mejores resultados
-  const baseQuery = phoneName.replace(/^Apple\s+/i, '');
-  const query = year ? `${baseQuery} ${year}` : baseQuery;
+  // No usamos category= porque el ID puede cambiar y limita resultados
+  // No añadimos el año al query porque restringe demasiado los listings reales
+  const query = phoneName.replace(/^Apple\s+/i, '');
+  void year; // reservado para uso futuro
 
   const params = new URLSearchParams({
     q: query,
     condition: 'new',
     limit: '6',
     sort: 'price_asc',
-    category: 'MLA1055', // Celulares y Smartphones
   });
 
   const res = await fetch(

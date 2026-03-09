@@ -142,19 +142,31 @@ function parseDevicePage(html: string): Partial<DeviceSearchResult> {
         }
         break;
 
-      // ── Cámara principal ─────────────────────────────────────────────────────
+      // ── Cámara principal (GSMArena usa nombres distintos según modelo) ────────
       case 'Main Camera':
-        if (['Single', 'Dual', 'Triple', 'Quad', 'Penta'].includes(ttl)) {
-          result.mainCamera = nfo;
-        }
+      case 'Rear Camera':
+      case 'Camera': {
+        // ttl puede ser: "Single", "Dual", "Triple", "Quad", "Penta",
+        // "Wide", "Telephoto", "Ultra-wide", o directamente "12 MP"
+        const isCameraRow =
+          ['Single', 'Dual', 'Triple', 'Quad', 'Penta'].includes(ttl) ||
+          /MP|megapixel/i.test(ttl) ||
+          /wide|tele|zoom/i.test(ttl);
+        if (isCameraRow && !result.mainCamera) result.mainCamera = nfo;
         break;
+      }
 
       // ── Cámara frontal ───────────────────────────────────────────────────────
       case 'Selfie camera':
-        if (['Single', 'Dual'].includes(ttl)) {
-          result.frontCamera = nfo;
-        }
+      case 'Selfie Camera':
+      case 'Front Camera':
+      case 'Front': {
+        const isFrontRow =
+          ['Single', 'Dual'].includes(ttl) ||
+          /MP|megapixel/i.test(ttl);
+        if (isFrontRow && !result.frontCamera) result.frontCamera = nfo;
         break;
+      }
 
       // ── Batería ──────────────────────────────────────────────────────────────
       case 'Battery':
@@ -221,18 +233,34 @@ async function findDeviceUrl(query: string): Promise<string | null> {
   const html = await proxiedFetch(searchUrl);
   const doc = new DOMParser().parseFromString(html, 'text/html');
 
-  // Probamos varios selectores por robustez
-  const selectors = ['.makers li a', '.section-body li a', 'ul li a[href$=".php"]'];
-  let link: HTMLAnchorElement | null = null;
-  for (const sel of selectors) {
-    link = doc.querySelector(sel) as HTMLAnchorElement | null;
-    if (link) break;
+  // Las páginas de dispositivo en GSMArena tienen el formato: "brand_model-12345.php"
+  // (letras/guiones bajos, seguido de un ID numérico antes de .php)
+  // Esto diferencia un device link de links de navegación como "/xiaomi.php" o "/search.php3"
+  const DEVICE_URL_RE = /^[a-z0-9_]+-\d+\.php$/i;
+
+  // 1. Selector semántico de la lista de resultados
+  const listLinks = Array.from(
+    doc.querySelectorAll('.makers li a, .section-body li a')
+  ) as HTMLAnchorElement[];
+
+  for (const a of listLinks) {
+    const href = a.getAttribute('href') ?? '';
+    if (DEVICE_URL_RE.test(href) || DEVICE_URL_RE.test(href.split('/').pop() ?? '')) {
+      return href.startsWith('http') ? href : `${GSMARENA}/${href}`;
+    }
   }
 
-  if (!link) return null;
+  // 2. Fallback: cualquier link cuyo href termine en el patrón de device
+  const allLinks = Array.from(doc.querySelectorAll('a[href]')) as HTMLAnchorElement[];
+  for (const a of allLinks) {
+    const href = a.getAttribute('href') ?? '';
+    const filename = href.split('/').pop() ?? '';
+    if (DEVICE_URL_RE.test(filename)) {
+      return href.startsWith('http') ? href : `${GSMARENA}/${href}`;
+    }
+  }
 
-  const href = link.getAttribute('href') ?? '';
-  return href.startsWith('http') ? href : `${GSMARENA}/${href}`;
+  return null;
 }
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
@@ -267,9 +295,16 @@ export function useDeviceSearch() {
       const html = await proxiedFetch(deviceUrl);
       const specs = parseDevicePage(html);
 
-      // Validamos que obtuvimos datos útiles
-      if (!specs.processor && !specs.display && !specs.battery) {
-        throw new Error('Se encontró el dispositivo pero no se pudieron leer las especificaciones.');
+      // Validamos que al menos un campo con datos fue encontrado
+      const hasAnySpec = !!(
+        specs.processor || specs.display || specs.battery ||
+        specs.ram || specs.os || specs.mainCamera
+      );
+      if (!hasAnySpec) {
+        throw new Error(
+          'No se pudieron leer las especificaciones. ' +
+          'GSMArena puede haber bloqueado el proxy — intentá de nuevo en unos segundos.'
+        );
       }
 
       return specs as DeviceSearchResult;
