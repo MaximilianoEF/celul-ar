@@ -23,12 +23,31 @@ export interface DeviceSearchResult {
 }
 
 const GSMARENA = 'https://www.gsmarena.com';
-const PROXY = 'https://api.allorigins.win/raw?url=';
+
+// Lista de proxies CORS en orden de preferencia — se prueba el siguiente si el anterior falla
+const PROXIES = [
+  (url: string) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+];
 
 async function proxiedFetch(url: string): Promise<string> {
-  const res = await fetch(`${PROXY}${encodeURIComponent(url)}`);
-  if (!res.ok) throw new Error(`Error ${res.status} al obtener datos`);
-  return res.text();
+  let lastError: Error = new Error('Sin proxies disponibles');
+
+  for (const buildProxy of PROXIES) {
+    try {
+      const res = await fetch(buildProxy(url), {
+        signal: AbortSignal.timeout(12_000), // 12 s por proxy
+      });
+      if (res.ok) return res.text();
+      lastError = new Error(`Error ${res.status} al obtener datos`);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error('Error de red');
+      // Continuar con el siguiente proxy
+    }
+  }
+
+  throw lastError;
 }
 
 // ─── Parser de la página de specs de GSMArena ────────────────────────────────
@@ -235,7 +254,10 @@ export function useDeviceSearch() {
     setError(null);
 
     try {
-      const query = `${brand} ${name} ${year}`;
+      // Evitar que el brand aparezca dos veces si ya está en el nombre
+      // Ej: brand="Xiaomi" name="Xiaomi Redmi 15c" → "Xiaomi Redmi 15c 2026" (no "Xiaomi Xiaomi ...")
+      const nameWithoutBrand = name.replace(new RegExp(`^${brand}\\s+`, 'i'), '').trim();
+      const query = `${brand} ${nameWithoutBrand || name} ${year}`.replace(/\s+/g, ' ').trim();
       const deviceUrl = await findDeviceUrl(query);
 
       if (!deviceUrl) {
