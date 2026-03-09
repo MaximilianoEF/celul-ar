@@ -12,8 +12,33 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { readFileSync, existsSync } from 'fs';
+import { resolve } from 'path';
 // @ts-expect-error: ts-node path aliases
 import { smartphones } from '../src/data/smartphones';
+
+// Carga manual de .env.local (tsx/Node no lo hacen automáticamente como Vite)
+function loadEnvFile() {
+  const envPath = resolve(process.cwd(), '.env.local');
+  if (!existsSync(envPath)) {
+    console.warn('⚠️  No se encontró .env.local en:', envPath);
+    return;
+  }
+  const lines = readFileSync(envPath, 'utf-8').split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const value = trimmed.slice(eqIdx + 1).trim();
+    if (key && !(key in process.env)) {
+      process.env[key] = value;
+    }
+  }
+}
+
+loadEnvFile();
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL ?? '';
 const supabaseKey =
@@ -21,6 +46,7 @@ const supabaseKey =
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('❌ Falta VITE_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en .env.local');
+  console.error('   Asegurate de que el archivo .env.local existe en la raíz del proyecto');
   process.exit(1);
 }
 
