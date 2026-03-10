@@ -5,22 +5,26 @@
 
 -- ─── Tabla principal de smartphones ───────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS smartphones (
-  id          TEXT PRIMARY KEY,
-  name        TEXT NOT NULL,
-  brand       TEXT NOT NULL,
-  year        INTEGER NOT NULL CHECK (year >= 2020 AND year <= 2035),
-  gama        TEXT NOT NULL CHECK (gama IN ('alta', 'media', 'baja')),
-  image       TEXT NOT NULL,
-  custom_image TEXT,
-  review      TEXT,
-  specs       JSONB NOT NULL DEFAULT '{}',
-  pros        TEXT[] NOT NULL DEFAULT '{}',
-  cons        TEXT[] NOT NULL DEFAULT '{}',
-  for_who     TEXT,
-  has_5g      BOOLEAN NOT NULL DEFAULT false,
-  has_nfc     BOOLEAN NOT NULL DEFAULT false,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                   TEXT PRIMARY KEY,
+  name                 TEXT NOT NULL,
+  brand                TEXT NOT NULL,
+  year                 INTEGER NOT NULL CHECK (year >= 2020 AND year <= 2035),
+  gama                 TEXT NOT NULL CHECK (gama IN ('alta', 'media', 'baja')),
+  image                TEXT NOT NULL,
+  custom_image         TEXT,
+  review               TEXT,
+  specs                JSONB NOT NULL DEFAULT '{}',
+  pros                 TEXT[] NOT NULL DEFAULT '{}',
+  cons                 TEXT[] NOT NULL DEFAULT '{}',
+  for_who              TEXT,
+  has_5g               BOOLEAN NOT NULL DEFAULT false,
+  has_nfc              BOOLEAN NOT NULL DEFAULT false,
+  -- Precio mínimo cacheado desde la API pública de Mercado Libre.
+  -- null = nunca sincronizado; se actualiza cada 30 días via RPC update_ml_price.
+  ml_lowest_price      INTEGER,
+  ml_price_updated_at  TIMESTAMPTZ,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ─── Tabla de precios por tienda ──────────────────────────────────────────────
@@ -36,6 +40,29 @@ CREATE TABLE IF NOT EXISTS store_prices (
 
 -- Índice para búsquedas por smartphone_id
 CREATE INDEX IF NOT EXISTS idx_store_prices_smartphone_id ON store_prices(smartphone_id);
+
+-- ─── Función RPC para actualizar precio ML (SECURITY DEFINER) ────────────────
+-- Permite que usuarios anónimos actualicen SOLO ml_lowest_price y ml_price_updated_at
+-- sin exponer escritura general sobre toda la tabla smartphones.
+CREATE OR REPLACE FUNCTION update_ml_price(
+  p_smartphone_id TEXT,
+  p_price         INTEGER
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE smartphones
+  SET
+    ml_lowest_price     = p_price,
+    ml_price_updated_at = now()
+  WHERE id = p_smartphone_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION update_ml_price(TEXT, INTEGER) TO anon, authenticated;
 
 -- ─── Trigger: actualiza updated_at automáticamente ───────────────────────────
 CREATE OR REPLACE FUNCTION update_updated_at()

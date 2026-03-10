@@ -34,11 +34,6 @@ const PhoneDetail = () => {
   const { data: phone, isLoading, isError } = usePhone(id ?? '');
   const [imageError, setImageError] = useState(false);
 
-  // ── Sincronización automática del precio ML en DB (cada 30 días) ──────────
-  // Si ml_price_updated_at es null o tiene más de 30 días, dispara un fetch
-  // a la API de ML y guarda el resultado en la DB via RPC.
-  useMLPriceSync(phone);
-
   // ── Precios en tiempo real (para mostrar listados individuales) ────────────
   const {
     data: mlListings = [],
@@ -46,6 +41,11 @@ const PhoneDetail = () => {
     isError: mlError,
     refetch: refetchML,
   } = useLiveMLPrice(phone?.name ?? '', phone?.year);
+
+  // ── Sincronización automática del precio ML en DB (cada 30 días) ──────────
+  // Reutiliza los listings ya obtenidos — sin fetch adicional.
+  // Persiste el precio en DB via RPC para que se vea en el catálogo y comparador.
+  useMLPriceSync(phone, mlListings);
 
   const {
     data: fravegaResult,
