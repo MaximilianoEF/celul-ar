@@ -12,6 +12,10 @@
 
 import { useQuery } from '@tanstack/react-query';
 
+// URL base de Supabase para llamar a la Edge Function ml-search
+const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+
 export interface MLListing {
   id: string;
   title: string;
@@ -52,6 +56,32 @@ function parseApiResults(results: any[]): MLListing[] {
       thumbnail: item.thumbnail,
       soldQuantity: item.sold_quantity ?? 0,
     }));
+}
+
+// ─── Estrategia 0: Supabase Edge Function ml-search (más confiable) ──────────
+// Usa las credenciales OAuth de ML almacenadas en Supabase Secrets.
+// Solo disponible cuando ML_CLIENT_ID y ML_CLIENT_SECRET están configurados.
+async function tryEdgeFunction(query: string): Promise<MLListing[] | null> {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+
+  const url = `${SUPABASE_URL}/functions/v1/ml-search?q=${encodeURIComponent(query)}`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) return null;
+    const data: { results?: unknown[]; error?: string } = await res.json();
+    if (data.error || !data.results) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const listings = parseApiResults(data.results as any[]);
+    return listings.length > 0 ? listings : null;
+  } catch {
+    return null;
+  }
 }
 
 // ─── Estrategia 1: API oficial de ML ─────────────────────────────────────────
@@ -225,6 +255,10 @@ async function tryMLScraping(query: string): Promise<MLListing[] | null> {
 export async function fetchMLListings(phoneName: string): Promise<MLListing[]> {
   // Los iPhone se buscan sin "Apple" → mejores resultados en ML
   const query = phoneName.replace(/^Apple\s+/i, '');
+
+  // Estrategia 0: Edge Function (OAuth seguro server-side) — más confiable
+  const edge = await tryEdgeFunction(query);
+  if (edge) return edge;
 
   // Estrategia 1: API oficial directa (rápida cuando está disponible)
   const direct = await tryDirectApi(query);
