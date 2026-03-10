@@ -31,17 +31,26 @@ export function MercadoLibreSearch({ phoneName, onSelectPrice }: Props) {
     setLoading(true);
     setError(null);
     try {
-      // API pública de MercadoLibre - no requiere autenticación
-      const query = encodeURIComponent(phoneName);
-      const res = await fetch(
-        `https://api.mercadolibre.com/sites/MLA/search?q=${query}&limit=5`
+      // Importamos fetchMLListings que maneja el fallback automáticamente
+      const { fetchMLListings } = await import('@/hooks/useLiveMLPrice');
+      const listings = await fetchMLListings(phoneName);
+      if (listings.length === 0) {
+        setError('Sin resultados. Intentá con otro nombre.');
+      }
+      setResults(
+        listings.map(l => ({
+          id: l.id,
+          title: l.title,
+          price: l.price,
+          currency_id: 'ARS',
+          permalink: l.permalink,
+          condition: 'new',
+          thumbnail: l.thumbnail,
+        }))
       );
-      if (!res.ok) throw new Error(`Error de MercadoLibre: ${res.status}`);
-      const data: MLSearchResponse = await res.json();
-      setResults(data.results);
       setSearched(true);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al buscar en MercadoLibre');
+      setError(err instanceof Error ? err.message : 'No se pudo conectar a Mercado Libre');
     } finally {
       setLoading(false);
     }
