@@ -104,9 +104,30 @@ CREATE POLICY "Admin write store_prices"
   USING (auth.role() = 'authenticated')
   WITH CHECK (auth.role() = 'authenticated');
 
+-- ─── Tabla de tokens OAuth de Mercado Libre ──────────────────────────────────
+-- Almacena el refresh_token de ML para que el Edge Function ml-search pueda
+-- obtener access_tokens sin exponer las credenciales en el cliente.
+-- Solo contiene una fila (patrón singleton).
+CREATE TABLE IF NOT EXISTS ml_tokens (
+  id            TEXT PRIMARY KEY DEFAULT 'singleton',
+  refresh_token TEXT NOT NULL,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Solo admins pueden leer/escribir tokens OAuth
+ALTER TABLE ml_tokens ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Admin manage ml_tokens" ON ml_tokens;
+CREATE POLICY "Admin manage ml_tokens"
+  ON ml_tokens FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
 -- =====================================================
 -- INSTRUCCIONES:
 -- 1. Ejecutá este archivo en el SQL Editor de Supabase
 -- 2. Luego ejecutá supabase/seed.sql para cargar los datos
 -- 3. En Authentication > Users, creá el usuario admin
+-- 4. (Opcional) Para precios de ML, seguí las instrucciones de .env.example
+--    y guardá el refresh_token con: supabase secrets set ...
 -- =====================================================

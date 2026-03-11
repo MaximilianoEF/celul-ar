@@ -74,8 +74,11 @@ async function tryEdgeFunction(query: string): Promise<MLListing[] | null> {
       signal: AbortSignal.timeout(12_000),
     });
     if (!res.ok) return null;
-    const data: { results?: unknown[]; error?: string } = await res.json();
+    const data: { results?: unknown[]; error?: string; source?: string } = await res.json();
     if (data.error || !data.results) return null;
+    // Si el Edge Function devolvió resultados de Fravega (ML bloqueado), no los mostramos
+    // en la sección ML → useLiveFravegaPrice los mostrará en la sección Frávega.
+    if (data.source === 'fravega') return null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const listings = parseApiResults(data.results as any[]);
     return listings.length > 0 ? listings : null;
@@ -105,29 +108,10 @@ async function tryDirectApi(query: string): Promise<MLListing[] | null> {
   }
 }
 
-// ─── Estrategia 2: API de ML vía CORS proxy ───────────────────────────────────
-// El proxy hace la petición server-side → ML puede responder distinto que al browser
-async function tryProxiedApi(query: string): Promise<MLListing[] | null> {
-  const params = new URLSearchParams({
-    q: query,
-    condition: 'new',
-    limit: '6',
-    sort: 'price_asc',
-  });
-  const apiUrl = `https://api.mercadolibre.com/sites/MLA/search?${params}`;
-  try {
-    const text = await proxiedFetch(apiUrl, 12_000);
-    if (!text) return null;
-    const data: { results: unknown[] } = JSON.parse(text);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const listings = parseApiResults(data.results as any[]);
-    return listings.length > 0 ? listings : null;
-  } catch {
-    return null;
-  }
-}
-
-// ─── Estrategia 3: Scraping del sitio de ML ───────────────────────────────────
+// ─── Estrategia 2: Scraping del sitio de ML ───────────────────────────────────
+// Nota: la API oficial (/sites/MLA/search) requiere OAuth independientemente del
+// origen o User-Agent — incluso via proxy CORS devuelve 403. Por eso saltamos
+// directo al scraping del sitio web, que no necesita autenticación.
 async function tryMLScraping(query: string): Promise<MLListing[] | null> {
   // URL de listado de ML Argentina: /SLUG?condition=new&sort=price_asc
   const slug = query.toLowerCase()
@@ -260,15 +244,11 @@ export async function fetchMLListings(phoneName: string): Promise<MLListing[]> {
   const edge = await tryEdgeFunction(query);
   if (edge) return edge;
 
-  // Estrategia 1: API oficial directa (rápida cuando está disponible)
+  // Estrategia 1: API oficial directa (funciona si ML vuelve a permitir acceso sin auth)
   const direct = await tryDirectApi(query);
   if (direct) return direct;
 
-  // Estrategia 2: API oficial vía CORS proxy (bypasa restricciones de IP/headers)
-  const proxied = await tryProxiedApi(query);
-  if (proxied) return proxied;
-
-  // Estrategia 3: Scraping del sitio de ML (funciona siempre que el sitio esté accesible)
+  // Estrategia 2: Scraping del sitio de ML (no requiere auth, accede al HTML público)
   const scraped = await tryMLScraping(query);
   if (scraped) return scraped;
 

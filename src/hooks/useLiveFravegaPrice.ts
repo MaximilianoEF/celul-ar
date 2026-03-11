@@ -1,7 +1,9 @@
 /**
- * useLiveFravegaPrice — intenta obtener el precio actual de Frávega vía scraping
- * con proxy CORS. Si falla, el componente debe mostrar un link de búsqueda en su lugar.
- * Estrategia: extrae __NEXT_DATA__ de la página de resultados de búsqueda de Frávega.
+ * useLiveFravegaPrice — obtiene el precio actual de Frávega.
+ *
+ * Estrategia en cascada:
+ *   1. Supabase Edge Function ml-search (usa VTEX Intelligent Search API, server-side)
+ *   2. Scraping via CORS proxy (fallback browser-side)
  */
 import { useQuery } from '@tanstack/react-query';
 
@@ -12,6 +14,28 @@ export interface FravegaResult {
   thumbnail?: string;
 }
 
+const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+
+// ─── Estrategia 0: Edge Function (VTEX API server-side, sin CORS) ─────────────
+async function tryEdgeFunctionFravega(query: string): Promise<FravegaResult | null> {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  try {
+    const url = `${SUPABASE_URL}/functions/v1/ml-search?q=${encodeURIComponent(query)}`;
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'apikey': SUPABASE_ANON_KEY },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return null;
+    const data: { results?: Array<{ title: string; price: number; permalink: string; thumbnail: string; store: string }>; source?: string } = await res.json();
+    if (!data.results?.length || data.source !== 'fravega') return null;
+    const first = data.results[0];
+    return { title: first.title, price: first.price, url: first.permalink, thumbnail: first.thumbnail };
+  } catch {
+    return null;
+  }
+}
+
 const PROXIES = [
   (url: string) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
   (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
@@ -20,8 +44,13 @@ const PROXIES = [
 async function scrapeFravegaPrice(phoneName: string): Promise<FravegaResult | null> {
   // Para Apple, quitar "Apple" porque en Frávega los iPhone van sin la marca
   const query = phoneName.replace(/^Apple\s+/i, '');
-  const searchUrl = `https://www.fravega.com/l/?keyword=${encodeURIComponent(query)}`;
 
+  // 0. Edge Function (VTEX API server-side — más confiable que CORS proxy)
+  const edgeResult = await tryEdgeFunctionFravega(query);
+  if (edgeResult) return edgeResult;
+
+  // 1. Fallback: CORS proxy + scraping browser-side
+  const searchUrl = `https://www.fravega.com/l/?keyword=${encodeURIComponent(query)}`;
   let html = '';
   for (const buildProxy of PROXIES) {
     try {
