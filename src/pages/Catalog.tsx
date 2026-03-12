@@ -1,11 +1,14 @@
 import { useState, useMemo } from 'react';
 import { Header } from '@/components/Header';
 import { PhoneCard } from '@/components/PhoneCard';
+import { PhoneCardSkeleton } from '@/components/PhoneCardSkeleton';
 import { Filters } from '@/components/Filters';
-import { smartphones } from '@/data/smartphones';
+import { usePhones } from '@/hooks/usePhones';
 import type { Gama } from '@/data/smartphones';
 
 const Catalog = () => {
+  const { data: smartphones = [], isLoading, isError, error } = usePhones();
+
   const [search, setSearch] = useState('');
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [selectedGamas, setSelectedGamas] = useState<Gama[]>([]);
@@ -14,9 +17,19 @@ const Catalog = () => {
   const [hasNFC, setHasNFC] = useState<boolean | null>(null);
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 5000000]);
 
+  // Derivados dinámicos desde los datos de Supabase
+  const brands = useMemo(
+    () => [...new Set(smartphones.map(s => s.brand))].sort(),
+    [smartphones]
+  );
+  const years = useMemo(
+    () => [...new Set(smartphones.map(s => s.year))].sort((a, b) => b - a),
+    [smartphones]
+  );
+
   const filteredPhones = useMemo(() => {
     return smartphones.filter(phone => {
-      if (search && !phone.name.toLowerCase().includes(search.toLowerCase()) && 
+      if (search && !phone.name.toLowerCase().includes(search.toLowerCase()) &&
           !phone.brand.toLowerCase().includes(search.toLowerCase())) {
         return false;
       }
@@ -37,7 +50,7 @@ const Catalog = () => {
       }
       return true;
     });
-  }, [search, selectedBrands, selectedGamas, selectedYears, has5G, hasNFC]);
+  }, [smartphones, search, selectedBrands, selectedGamas, selectedYears, has5G, hasNFC]);
 
   const stats = useMemo(() => ({
     total: filteredPhones.length,
@@ -49,13 +62,17 @@ const Catalog = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
       <main className="container py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">Catálogo de Smartphones</h1>
-          <p className="text-muted-foreground">
-            {stats.total} equipos disponibles • {stats.alta} gama alta • {stats.media} gama media • {stats.baja} gama baja
-          </p>
+          {isLoading ? (
+            <div className="h-4 w-64 bg-secondary/50 rounded animate-pulse" />
+          ) : (
+            <p className="text-muted-foreground">
+              {stats.total} equipos disponibles • {stats.alta} gama alta • {stats.media} gama media • {stats.baja} gama baja
+            </p>
+          )}
         </div>
 
         <Filters
@@ -73,9 +90,24 @@ const Catalog = () => {
           onHasNFCChange={setHasNFC}
           priceRange={priceRange}
           onPriceRangeChange={setPriceRange}
+          brands={brands}
+          years={years}
         />
 
-        {filteredPhones.length === 0 ? (
+        {isError && (
+          <div className="text-center py-16">
+            <p className="text-destructive text-lg mb-2">Error al cargar el catálogo</p>
+            <p className="text-muted-foreground text-sm">{error?.message}</p>
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <PhoneCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : filteredPhones.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-muted-foreground text-lg">
               No se encontraron equipos con los filtros seleccionados.
@@ -90,7 +122,6 @@ const Catalog = () => {
         )}
       </main>
 
-      {/* Footer */}
       <footer className="py-8 border-t border-border/50 mt-12">
         <div className="container">
           <p className="text-sm text-muted-foreground text-center">

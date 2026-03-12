@@ -131,20 +131,41 @@ export function getPurchaseUrl(
   return `https://www.google.com.ar/search?q=${encodedQuery}+precio+argentina`;
 }
 
-// Detecta si una URL es probablemente real (no un slug inventado)
+// Allowlist de dominios válidos extraída del storesConfig
+// Solo se aceptan URLs cuyo hostname pertenezca a una tienda configurada
+const ALLOWED_DOMAINS = new Set(
+  Object.values(storesConfig).map(c => c.domain)
+);
+
+// Patrones de URLs reales de producto por dominio.
+// Sin este patrón, la URL pasa solo con el check de dominio
+// (útil para evitar slugs genéricos sin ID que siempre 404).
+const STORE_PRODUCT_PATTERNS: Partial<Record<string, RegExp>> = {
+  // ML real: /p/MLB12345678 o MLA-1234567890 en el path o subdomain articulo.*
+  'mercadolibre.com.ar': /(?:\/p\/ML[A-Z]\d+|ML[A-Z]-\d{7,})/i,
+  // Frávega real: URL termina en /NNNNNN (ID numérico de 6+ dígitos)
+  'fravega.com': /\/\d{6,}(?:\/|$|\?)/,
+};
+
+// Valida que la URL pertenece a un dominio conocido Y (si aplica) tiene el
+// formato de URL real del producto — no un slug genérico inventado.
 function isLikelyRealUrl(url: string): boolean {
-  // URLs que son claramente slugs inventados del dataset original
-  // Patrón: dominio + nombre-del-producto sin path real
-  const fakePatterns = [
-    /mercadolibre\.com\.ar\/[a-z-]+-\d+-gb$/i,
-    /mercadolibre\.com\.ar\/[a-z-]+$/i,
-    /ipoint\.com\.ar\/[a-z0-9-]+$/i,
-    /macstation\.com\.ar\/[a-z0-9-]+$/i,
-    /fravega\.com\/p\/celular-[a-z0-9-]+$/i,
-    /tienda\.personal\.com\.ar\/celulares\/[a-z]+\/[a-z0-9-]+$/i,
-  ];
-  
-  return !fakePatterns.some(pattern => pattern.test(url));
+  try {
+    const { hostname, pathname } = new URL(url);
+    const knownDomain = [...ALLOWED_DOMAINS].find(
+      d => hostname === d || hostname.endsWith('.' + d)
+    );
+    if (!knownDomain) return false;
+
+    const pattern = STORE_PRODUCT_PATTERNS[knownDomain];
+    // Si hay patrón, la URL completa debe matchearlo
+    if (pattern) return pattern.test(url);
+
+    // Para tiendas sin patrón definido, el check de dominio alcanza
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Google Shopping como fallback universal

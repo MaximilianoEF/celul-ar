@@ -3,11 +3,15 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, TrendingUp, Star, Zap } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { PhoneCard } from '@/components/PhoneCard';
+import { PhoneCardSkeleton } from '@/components/PhoneCardSkeleton';
 import { Filters } from '@/components/Filters';
-import { smartphones, getMinPrice } from '@/data/smartphones';
+import { usePhones } from '@/hooks/usePhones';
+import { getMinPrice } from '@/data/smartphones';
 import type { Gama } from '@/data/smartphones';
 
 const Index = () => {
+  const { data: smartphones = [], isLoading } = usePhones();
+
   const [search, setSearch] = useState('');
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [selectedGamas, setSelectedGamas] = useState<Gama[]>([]);
@@ -16,9 +20,19 @@ const Index = () => {
   const [hasNFC, setHasNFC] = useState<boolean | null>(null);
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 5000000]);
 
+  // Derivados dinámicos desde los datos de Supabase
+  const brands = useMemo(
+    () => [...new Set(smartphones.map(s => s.brand))].sort(),
+    [smartphones]
+  );
+  const years = useMemo(
+    () => [...new Set(smartphones.map(s => s.year))].sort((a, b) => b - a),
+    [smartphones]
+  );
+
   const filteredPhones = useMemo(() => {
     return smartphones.filter(phone => {
-      if (search && !phone.name.toLowerCase().includes(search.toLowerCase()) && 
+      if (search && !phone.name.toLowerCase().includes(search.toLowerCase()) &&
           !phone.brand.toLowerCase().includes(search.toLowerCase())) {
         return false;
       }
@@ -39,48 +53,46 @@ const Index = () => {
       }
       return true;
     });
-  }, [search, selectedBrands, selectedGamas, selectedYears, has5G, hasNFC]);
+  }, [smartphones, search, selectedBrands, selectedGamas, selectedYears, has5G, hasNFC]);
 
-  // Featured phones (lowest price gama alta)
   const featuredPhones = useMemo(() => {
     return smartphones
       .filter(p => p.gama === 'alta')
       .sort((a, b) => (getMinPrice(a) || 0) - (getMinPrice(b) || 0))
       .slice(0, 3);
-  }, []);
+  }, [smartphones]);
 
-  // Best value (gama media with best specs)
   const bestValuePhones = useMemo(() => {
     return smartphones
       .filter(p => p.gama === 'media')
       .slice(0, 4);
-  }, []);
+  }, [smartphones]);
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
       {/* Hero Section */}
       <section className="relative py-16 md:py-24 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
         <div className="absolute top-20 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
         <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-accent/10 rounded-full blur-3xl" />
-        
+
         <div className="container relative">
           <div className="max-w-3xl mx-auto text-center">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6 animate-fade-in">
               <TrendingUp className="h-4 w-4" />
-              Catálogo actualizado 2024-2025
+              Catálogo actualizado {new Date().getFullYear()}
             </div>
-            
+
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 animate-slide-up">
               Encontrá tu próximo{' '}
               <span className="gradient-text">smartphone</span>
               {' '}ideal
             </h1>
-            
+
             <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto animate-slide-up" style={{ animationDelay: '0.1s' }}>
-              Comparamos precios en Mercado Libre, Frávega y más tiendas argentinas. 
+              Comparamos precios en Mercado Libre, Frávega y más tiendas argentinas.
               Reviews honestas, specs reales y el mejor precio disponible.
             </p>
 
@@ -116,18 +128,19 @@ const Index = () => {
                 Gama Alta
               </h2>
             </div>
-            <Link 
-              to="/catalogo?gama=alta" 
+            <Link
+              to="/catalogo?gama=alta"
               className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
             >
               Ver todos <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featuredPhones.map(phone => (
-              <PhoneCard key={phone.id} phone={phone} />
-            ))}
+            {isLoading
+              ? Array.from({ length: 3 }).map((_, i) => <PhoneCardSkeleton key={i} />)
+              : featuredPhones.map(phone => <PhoneCard key={phone.id} phone={phone} />)
+            }
           </div>
         </div>
       </section>
@@ -145,18 +158,19 @@ const Index = () => {
                 Gama Media Recomendados
               </h2>
             </div>
-            <Link 
-              to="/catalogo?gama=media" 
+            <Link
+              to="/catalogo?gama=media"
               className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
             >
               Ver todos <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
-          
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {bestValuePhones.map(phone => (
-              <PhoneCard key={phone.id} phone={phone} />
-            ))}
+            {isLoading
+              ? Array.from({ length: 4 }).map((_, i) => <PhoneCardSkeleton key={i} />)
+              : bestValuePhones.map(phone => <PhoneCard key={phone.id} phone={phone} />)
+            }
           </div>
         </div>
       </section>
@@ -167,7 +181,7 @@ const Index = () => {
           <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-8">
             Catálogo Completo
           </h2>
-          
+
           <Filters
             search={search}
             onSearchChange={setSearch}
@@ -183,9 +197,15 @@ const Index = () => {
             onHasNFCChange={setHasNFC}
             priceRange={priceRange}
             onPriceRangeChange={setPriceRange}
+            brands={brands}
+            years={years}
           />
 
-          {filteredPhones.length === 0 ? (
+          {isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {Array.from({ length: 8 }).map((_, i) => <PhoneCardSkeleton key={i} />)}
+            </div>
+          ) : filteredPhones.length === 0 ? (
             <div className="text-center py-16">
               <p className="text-muted-foreground text-lg">
                 No se encontraron equipos con los filtros seleccionados.
@@ -201,12 +221,11 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="py-8 border-t border-border/50">
         <div className="container">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground">
-              © 2024 CeluAR. Precios actualizados de tiendas argentinas.
+              © {new Date().getFullYear()} CeluAR. Precios actualizados de tiendas argentinas.
             </p>
             <p className="text-xs text-muted-foreground">
               Los precios pueden variar. Verificá siempre en la tienda oficial.
